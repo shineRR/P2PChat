@@ -8,23 +8,26 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 const (
 	Port 			= "8080"
 	BroadcastAdr	= "192.168.0.255:8080"
+	DNSGoogle		= "8.8.8.8:80"
 	CONNECT			= "CONNECT"
-	RESPONSE		= "RESPONSE"
+	MSGRESPONSE		= "MSGRESPONSE"
 	HISTORY			= "HISTORY"
 	PUBLIC			= "PUBLIC"
 	DISCONNECT		= "DISCONNECT"
 )
 
 type Message struct {
-	Kind      	string //
-	Username	string //my username
-	IP        	string //Ip address of my computer
-	MSG       	string //message
+	Kind      	string		//	Type of message
+	Time 		time.Time	// 	Time of message
+	Username	string		//	Username of the message
+	IP        	string		//	Ip address of the computer
+	MSG       	string		//	message
 }
 
 var (
@@ -35,9 +38,10 @@ var (
 	listIPs         map[string]string   = make(map[string]string)
 )
 
-func createMessage(Kind string, Username string, IP string, Msg string) (msg *Message) {
+func createMessage(Kind string, Time time.Time, Username string, IP string, Msg string) (msg *Message) {
 	msg = new(Message)
 	msg.Kind = Kind
+	msg.Time = Time
 	msg.Username = Username
 	msg.IP = IP
 	msg.MSG = Msg
@@ -45,7 +49,7 @@ func createMessage(Kind string, Username string, IP string, Msg string) (msg *Me
 }
 
 func getLocalIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	conn, err := net.Dial("udp", "8.8.8.8:8080")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -108,16 +112,21 @@ func receive(conn net.Conn) {
 			return
 		}
 
+		msg.Time = time.Now()
 		switch msg.Kind {
 		case CONNECT:
 			if !handleConnection(*msg, conn) {
 				return
 			}
-		case RESPONSE:
-			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "]")
+		case MSGRESPONSE:
+			if msg.IP == getLocalIP() {
+				fmt.Println(msg.MSG + " - " + msg.Username + "(Me)" + msg.Time.Format("01-02-2006 15:04:05"))
+			} else {
+				fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "] " + msg.Time.Format("01-02-2006 15:04:05"))
+			}
 
 		case PUBLIC:
-			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "]")
+			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "] " + msg.Time.Format("01-02-2006 15:04:05"))
 			messages = append(messages, *msg)
 
 		case HISTORY:
@@ -128,14 +137,6 @@ func receive(conn net.Conn) {
 			return
 		}
 	}
-}
-
-func disconnect(msg Message) {
-	mutex.Lock()
-	delete(listIPs, msg.Username)
-	delete(listConnections, msg.Username)
-	mutex.Unlock()
-	fmt.Println(msg.Username + " left the chat :(")
 }
 
 func handleConnection(msg Message, conn net.Conn) bool {
@@ -155,6 +156,7 @@ func (msg *Message) sendMessage() {
 
 func (msg *Message) sendPrivateMessage(receiver string) {
 	enc := json.NewEncoder(listConnections[receiver])
+	msg.Kind = MSGRESPONSE
 	enc.Encode(msg)
 }
 
@@ -178,11 +180,11 @@ func listenUDP() {
 	}
 	fmt.Printf("%s connected and ready to chat :)\n", buf[:n])
 
-	receivedMsg := createMessage(CONNECT, string(buf[:n]), addr.String(), "123")
+	receivedMsg := createMessage(CONNECT, time.Now(), string(buf[:n]), addr.String(), "123")
 	conn := createTCPConnection(addr.String())
 	handleConnection(*receivedMsg, conn)
 	enc:= json.NewEncoder(conn)
-	introMessage := createMessage(CONNECT, myName, getLocalIP(), "Response for UDP packet\n")
+	introMessage := createMessage(CONNECT, time.Now(), myName, getLocalIP(), "Response for UDP packet\n")
 	enc.Encode(introMessage)
 	go listenUDP()
 	go receive(conn)
@@ -214,19 +216,24 @@ func introduceMyself() {
 	fmt.Print("Enter your name: ")
 	var name string
 	fmt.Scanln(&name)
-	fmt.Println("Welcome to the chat " + name + " :)" + " - Server")
-	msg := createMessage("CONNECT", name, getLocalIP(), "Hello, my friend\n")
+	fmt.Println("Welcome to the chat " + name + " :)" + " - Server " + time.Now().Format("01-02-2006 15:04:05"))
+	msg := createMessage("CONNECT", time.Now(), name, getLocalIP(), "Hello, my friend\n")
 	myName = name
 	msg.sendUDP()
 }
 
-func server() {
-	go listenTCPConnection(getLocalIP())
-}
 
 func printHelp() {
 	fmt.Println("	'.disconnect' - to disconnect from the chat")
 	fmt.Println("	'.hist [name]' - to ask for history of messages")
+}
+
+func disconnect(msg Message) {
+	mutex.Lock()
+	delete(listIPs, msg.Username)
+	delete(listConnections, msg.Username)
+	mutex.Unlock()
+	fmt.Println(msg.Username + " left the chat :(")
 }
 
 func userExists(name string) bool {
@@ -244,35 +251,38 @@ func userInput() {
 		var message string
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			fmt.Println(scanner.Text() + " - " + myName + "(Me)")
+			fmt.Println(scanner.Text() + " - " + myName + "(Me) " + time.Now().Format("01-02-2006 15:04:05"))
 			message = scanner.Text()
 			switch message {
 			case ".disconnect":
-				disconnectMsg := createMessage(DISCONNECT, myName, getLocalIP(), "Disconnected")
+				disconnectMsg := createMessage(DISCONNECT,  time.Now(), myName, getLocalIP(), "Disconnected")
 				disconnectMsg.sendMessage()
-				fmt.Println("You have left the chat :(")
+				fmt.Println("You have left the chat :( " + time.Now().Format("01-02-2006 15:04:05"))
 				os.Exit(0)
 			case ".help":
 				printHelp()
 			default:
-				if (len(message) > 6 && message[0:5] == ".hist") {
+				if len(message) > 6 && message[0:5] == ".hist" {
 					username := message[6:len(message)]
 					if userExists(username) {
-						createMessage(HISTORY, myName, getLocalIP(), username).sendMessage()
+						createMessage(HISTORY, time.Now(), myName, getLocalIP(), username).sendMessage()
 					}
 				} else if len(message) > 0 {
-					msg = createMessage(PUBLIC, myName, getLocalIP(), message)
+					msg = createMessage(PUBLIC, time.Now(), myName, getLocalIP(), message)
 					messages = append(messages, *msg)
 					msg.sendMessage()
 				}
 			}
-			//log.Println(messages)
 		}
 		if err := scanner.Err(); err != nil {
 			log.Println(err)
 		}
 	}
 	os.Exit(1)
+}
+
+func server() {
+	go listenTCPConnection(getLocalIP())
 }
 
 func main() {
