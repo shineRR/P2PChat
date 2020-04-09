@@ -99,6 +99,15 @@ func listenTCPConnection(IP string) {
 	}
 }
 
+func getNameByIP(IP string) string {
+	for n, adr := range listIPs {
+		if adr == IP {
+			return n
+		}
+	}
+	return ""
+}
+
 func receive(conn net.Conn) {
 	defer func() {
 		conn.Close()
@@ -108,7 +117,8 @@ func receive(conn net.Conn) {
 	msg := new(Message)
 	for {
 		if err := dec.Decode(msg); err != nil {
-			fmt.Println(err)
+			msg := createMessage(DISCONNECT, time.Now(), getNameByIP(conn.RemoteAddr().String()), "", "")
+			disconnect(*msg)
 			return
 		}
 
