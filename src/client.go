@@ -255,7 +255,7 @@ func userInput() {
 			case ".help":
 				printHelp()
 			default:
-				if message[0:5] == ".hist" {
+				if (len(message) > 6 && message[0:5] == ".hist") {
 					username := message[6:len(message)]
 					if userExists(username) {
 						createMessage(HISTORY, myName, getLocalIP(), username).sendMessage()
