@@ -49,7 +49,7 @@ func createMessage(Kind string, Time time.Time, Username string, IP string, Msg 
 }
 
 func getLocalIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:8080")
+	conn, err := net.Dial("udp", DNSGoogle)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -231,7 +231,6 @@ func introduceMyself() {
 	myName = name
 	msg.sendUDP()
 }
-
 
 func printHelp() {
 	fmt.Println("	'.disconnect' - to disconnect from the chat")
