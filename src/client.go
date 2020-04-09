@@ -10,27 +10,29 @@ import (
 	"sync"
 )
 
-const Port = "8080"
-const BroadcastAdr = "192.168.0.255:8080"
-const CONNECT = "CONNECT"
-const RESPONSE = "RESPONSE"
-const RESPONSEUDP = "RESPONSEUDP"
-const PUBLIC  = "PUBLIC"
-const DISCONNECT = "DISCONNECT"
+const (
+	Port 			= "8080"
+	BroadcastAdr	= "192.168.0.255:8080"
+	CONNECT			= "CONNECT"
+	RESPONSE		= "RESPONSE"
+	HISTORY			= "HISTORY"
+	PUBLIC			= "PUBLIC"
+	DISCONNECT		= "DISCONNECT"
+)
 
 type Message struct {
-	Kind      string //
-	Username  string //my username
-	IP        string //Ip address of my computer
-	MSG       string //message
+	Kind      	string //
+	Username	string //my username
+	IP        	string //Ip address of my computer
+	MSG       	string //message
 }
 
 var (
-	messsages = make([]Message, 0)
-	mutex = new(sync.Mutex)
-	myName string = ""
-	listConnections map[string]net.Conn = make(map[string]net.Conn)//list of users connections connected to mel
-	listIPs map[string]string = make(map[string]string)//list of users IPS connected to me
+	messages                            =[]Message{}
+	mutex                               = new(sync.Mutex)
+	myName          string              = ""
+	listConnections map[string]net.Conn = make(map[string]net.Conn)
+	listIPs         map[string]string   = make(map[string]string)
 )
 
 func createMessage(Kind string, Username string, IP string, Msg string) (msg *Message) {
@@ -66,7 +68,6 @@ func createTCPConnection(IP string) (conn net.Conn) {
 }
 
 func listenTCPConnection(IP string) {
-	//log.Println("Server started \n")
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", IP + ":" + Port)
 	if err != nil {
 		fmt.Println(err)
@@ -97,7 +98,6 @@ func listenTCPConnection(IP string) {
 func receive(conn net.Conn) {
 	defer func() {
 		conn.Close()
-		//fmt.Println("closed")
 	}()
 
 	dec := json.NewDecoder(conn)
@@ -118,6 +118,10 @@ func receive(conn net.Conn) {
 
 		case PUBLIC:
 			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "]")
+			messages = append(messages, *msg)
+
+		case HISTORY:
+			sendHistoryOfCurrentSession(*msg)
 
 		case DISCONNECT:
 			disconnect(*msg)
@@ -143,9 +147,20 @@ func handleConnection(msg Message, conn net.Conn) bool {
 }
 
 func (msg *Message) sendMessage() {
-	for _,peerConnection := range listConnections{
-		enc:=json.NewEncoder(peerConnection)
+	for _, peerConnection := range listConnections {
+		enc := json.NewEncoder(peerConnection)
 		enc.Encode(msg)
+	}
+}
+
+func (msg *Message) sendPrivateMessage(receiver string) {
+	enc := json.NewEncoder(listConnections[receiver])
+	enc.Encode(msg)
+}
+
+func sendHistoryOfCurrentSession(msg Message) {
+	for _, msgToSend := range messages {
+		msgToSend.sendPrivateMessage(msg.Username)
 	}
 }
 
@@ -209,25 +224,49 @@ func server() {
 	go listenTCPConnection(getLocalIP())
 }
 
+func printHelp() {
+	fmt.Println("	'.disconnect' - to disconnect from the chat")
+	fmt.Println("	'.hist [name]' - to ask for history of messages")
+}
+
+func userExists(name string) bool {
+	for n, _ := range listIPs {
+		if name == n {
+			return true
+		}
+	}
+	return false
+}
+
 func userInput() {
 	msg := new(Message)
 	for {
 		var message string
-		//fmt.Print("Message: ")x
-		//fmt.Scan(&message)
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			fmt.Println(scanner.Text() + " - " + myName + "(Me)")
 			message = scanner.Text()
-			if message == ".disconnect" {
+			switch message {
+			case ".disconnect":
 				disconnectMsg := createMessage(DISCONNECT, myName, getLocalIP(), "Disconnected")
 				disconnectMsg.sendMessage()
 				fmt.Println("You have left the chat :(")
 				os.Exit(0)
-			} else if len(message) > 0 {
-				msg = createMessage(PUBLIC, myName, getLocalIP(), message)
-				msg.sendMessage()
+			case ".help":
+				printHelp()
+			default:
+				if message[0:5] == ".hist" {
+					username := message[6:len(message)]
+					if userExists(username) {
+						createMessage(HISTORY, myName, getLocalIP(), username).sendMessage()
+					}
+				} else if len(message) > 0 {
+					msg = createMessage(PUBLIC, myName, getLocalIP(), message)
+					messages = append(messages, *msg)
+					msg.sendMessage()
+				}
 			}
+			//log.Println(messages)
 		}
 		if err := scanner.Err(); err != nil {
 			log.Println(err)
