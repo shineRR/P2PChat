@@ -266,6 +266,10 @@ func userInput() {
 					username := message[6:len(message)]
 					if userExists(username) {
 						createMessage(HISTORY, time.Now(), myName, getLocalIP(), username).sendMessage()
+					} else if username == myName {
+						fmt.Println("You can't ask yourself to send history :D")
+					} else {
+						fmt.Println(username + " isn't online.")
 					}
 				} else if len(message) > 0 {
 					msg = createMessage(PUBLIC, time.Now(), myName, getLocalIP(), message)
