@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -25,6 +26,7 @@ type Message struct {
 }
 
 var (
+	messsages = make([]Message, 0)
 	mutex = new(sync.Mutex)
 	myName string = ""
 	listConnections map[string]net.Conn = make(map[string]net.Conn)//list of users connections connected to mel
@@ -95,7 +97,7 @@ func listenTCPConnection(IP string) {
 func receive(conn net.Conn) {
 	defer func() {
 		conn.Close()
-		fmt.Println("closed")
+		//fmt.Println("closed")
 	}()
 
 	dec := json.NewDecoder(conn)
@@ -112,20 +114,24 @@ func receive(conn net.Conn) {
 				return
 			}
 		case RESPONSE:
-			fmt.Println(msg.Username + " [" + msg.IP + "]" + " - " + msg.MSG)
+			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "]")
 
 		case PUBLIC:
-			fmt.Println(msg.Username + " [" + msg.IP + "]" + " - " + msg.MSG)
+			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "]")
 
 		case DISCONNECT:
-			//disconnect(*msg)
-			break
+			disconnect(*msg)
+			return
 		}
 	}
 }
 
 func disconnect(msg Message) {
-
+	mutex.Lock()
+	delete(listIPs, msg.Username)
+	delete(listConnections, msg.Username)
+	mutex.Unlock()
+	fmt.Println(msg.Username + " left the chat :(")
 }
 
 func handleConnection(msg Message, conn net.Conn) bool {
@@ -193,7 +199,7 @@ func introduceMyself() {
 	fmt.Print("Enter your name: ")
 	var name string
 	fmt.Scanln(&name)
-	fmt.Println("Server - Welcome to the chat " + name + " :)")
+	fmt.Println("Welcome to the chat " + name + " :)" + " - Server")
 	msg := createMessage("CONNECT", name, getLocalIP(), "Hello, my friend\n")
 	myName = name
 	msg.sendUDP()
@@ -208,15 +214,23 @@ func userInput() {
 	for {
 		var message string
 		//fmt.Print("Message: ")x
-		fmt.Scanln(&message)
-		//fmt.Println("Me - ", message)
-		if message == "disconnect"{
-			msg = createMessage(DISCONNECT, myName, getLocalIP(),"Disconnected")
-			msg.sendMessage()
-			break
-		} else if len(message) > 1 {
-			msg = createMessage(PUBLIC, myName, getLocalIP(), message)
-			msg.sendMessage()
+		//fmt.Scan(&message)
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			fmt.Println(scanner.Text() + " - " + myName + "(Me)")
+			message = scanner.Text()
+			if message == ".disconnect" {
+				disconnectMsg := createMessage(DISCONNECT, myName, getLocalIP(), "Disconnected")
+				disconnectMsg.sendMessage()
+				fmt.Println("You have left the chat :(")
+				os.Exit(0)
+			} else if len(message) > 0 {
+				msg = createMessage(PUBLIC, myName, getLocalIP(), message)
+				msg.sendMessage()
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Println(err)
 		}
 	}
 	os.Exit(1)
