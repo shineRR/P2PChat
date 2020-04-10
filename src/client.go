@@ -95,7 +95,7 @@ func listenTCPConnection(IP string) {
 			break
 		}
 
-		go receive(conn)
+		go receiveMessage(conn)
 	}
 }
 
@@ -108,7 +108,7 @@ func getNameByIP(IP string) string {
 	return ""
 }
 
-func receive(conn net.Conn) {
+func receiveMessage(conn net.Conn) {
 	defer func() {
 		conn.Close()
 	}()
@@ -197,10 +197,10 @@ func listenUDP() {
 	introMessage := createMessage(CONNECT, time.Now(), myName, getLocalIP(), "Response for UDP packet\n")
 	enc.Encode(introMessage)
 	go listenUDP()
-	go receive(conn)
+	go receiveMessage(conn)
 }
 
-func (MSG *Message) sendUDP() {
+func (MSG *Message) sendUDPBroadcast() {
 	listenAddr, err := net.ResolveUDPAddr("udp4", ":" + Port)
 	if err != nil {
 		panic(err)
@@ -229,7 +229,7 @@ func introduceMyself() {
 	fmt.Println("Welcome to the chat " + name + " :)" + " - Server " + time.Now().Format("01-02-2006 15:04:05"))
 	msg := createMessage("CONNECT", time.Now(), name, getLocalIP(), "Hello, my friend\n")
 	myName = name
-	msg.sendUDP()
+	msg.sendUDPBroadcast()
 }
 
 func printHelp() {
@@ -294,13 +294,13 @@ func userInput() {
 	os.Exit(1)
 }
 
-func server() {
+func startServer() {
 	go listenTCPConnection(getLocalIP())
 }
 
 func main() {
 	introduceMyself()
 	go listenUDP()
-	go server()
+	go startServer()
 	userInput()
 }
