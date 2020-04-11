@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	Port 			= "8080"
-	BroadcastAdr	= "192.168.0.255:8080"
-	DNSGoogle		= "8.8.8.8:80"
-	CONNECT			= "CONNECT"
-	MSGRESPONSE		= "MSGRESPONSE"
-	HISTORY			= "HISTORY"
-	PUBLIC			= "PUBLIC"
-	DISCONNECT		= "DISCONNECT"
+	Port            = "8080"
+	BroadcastAdr    = "192.168.0.255:8080"
+	DNSGoogle       = "8.8.8.8:80"
+	CONNECT         = "CONNECT"
+	HISTORYRESPONSE = "HISTORYRESPONSE"
+	HISTORYREQUEST  = "HISTORYREQUEST"
+	PUBLIC          = "PUBLIC"
+	DISCONNECT      = "DISCONNECT"
 )
 
 type Message struct {
@@ -128,7 +128,7 @@ func receiveMessage(conn net.Conn) {
 			if !handleConnection(*msg, conn) {
 				return
 			}
-		case MSGRESPONSE:
+		case HISTORYRESPONSE:
 			if msg.IP == getLocalIP() {
 				fmt.Println(msg.MSG + " - " + msg.Username + "(Me)" + msg.Time.Format("01-02-2006 15:04:05"))
 			} else {
@@ -139,7 +139,7 @@ func receiveMessage(conn net.Conn) {
 			fmt.Println(msg.MSG + " - " + msg.Username + "[" + msg.IP + "] " + msg.Time.Format("01-02-2006 15:04:05"))
 			messages = append(messages, *msg)
 
-		case HISTORY:
+		case HISTORYREQUEST:
 			sendHistoryOfCurrentSession(*msg)
 
 		case DISCONNECT:
@@ -166,7 +166,7 @@ func (msg *Message) sendMessage() {
 
 func (msg *Message) sendPrivateMessage(receiver string) {
 	enc := json.NewEncoder(listConnections[receiver])
-	msg.Kind = MSGRESPONSE
+	msg.Kind = HISTORYRESPONSE
 	enc.Encode(msg)
 }
 
@@ -274,7 +274,7 @@ func userInput() {
 				if len(message) > 6 && message[0:5] == ".hist" {
 					username := message[6:len(message)]
 					if userExists(username) {
-						createMessage(HISTORY, time.Now(), myName, getLocalIP(), username).sendMessage()
+						createMessage(HISTORYREQUEST, time.Now(), myName, getLocalIP(), username).sendMessage()
 					} else if username == myName {
 						fmt.Println("You can't ask yourself to send history :D")
 					} else {
